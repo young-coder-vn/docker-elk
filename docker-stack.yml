@@ -11,7 +11,7 @@ services:
       - source: elastic_config
         target: /usr/share/elasticsearch/config/elasticsearch.yml
     environment:
-      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
       ELASTIC_PASSWORD: changeme
       # Use single node discovery in order to disable production mode and avoid bootstrap checks.
       # see: https://www.elastic.co/guide/en/elasticsearch/reference/current/bootstrap-checks.html
@@ -20,9 +20,28 @@ services:
       network.publish_host: _eth0_
     networks:
       - elk
+      - traefik-public
     deploy:
       mode: replicated
       replicas: 1
+      resources:
+        limits:
+          cpus: '4'
+          memory: 2048M
+      restart_policy:
+        condition: on-failure
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.constraint-label=traefik-public
+        - traefik.http.routers.elk-elasticsearch-http.rule=Host(`elasticsearch.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.elk-elasticsearch-http.entrypoints=http
+        - traefik.http.routers.elk-elasticsearch-http.middlewares=https-redirect
+        - traefik.http.routers.elk-elasticsearch-https.rule=Host(`elasticsearch.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.elk-elasticsearch-https.entrypoints=https
+        - traefik.http.routers.elk-elasticsearch-https.tls=true
+        - traefik.http.routers.elk-elasticsearch-https.tls.certresolver=le
+        - traefik.http.services.elk-elasticsearch.loadbalancer.server.port=9200
 
   logstash:
     image: docker.elastic.co/logstash/logstash:7.15.0
@@ -30,6 +49,8 @@ services:
       - "5044:5044"
       - "5000:5000"
       - "9600:9600"
+      - "5544:5544/udp"
+      - "12201:12201/udp"
     configs:
       - source: logstash_config
         target: /usr/share/logstash/config/logstash.yml
@@ -39,9 +60,28 @@ services:
       LS_JAVA_OPTS: "-Xmx256m -Xms256m"
     networks:
       - elk
+      - traefik-public
     deploy:
       mode: replicated
       replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1024M
+      restart_policy:
+        condition: on-failure
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.constraint-label=traefik-public
+        - traefik.http.routers.elk-logstash-http.rule=Host(`logstash.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.elk-logstash-http.entrypoints=http
+        - traefik.http.routers.elk-logstash-http.middlewares=https-redirect
+        - traefik.http.routers.elk-logstash-https.rule=Host(`logstash.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.elk-logstash-https.entrypoints=https
+        - traefik.http.routers.elk-logstash-https.tls=true
+        - traefik.http.routers.elk-logstash-https.tls.certresolver=le
+        - traefik.http.services.elk-logstash.loadbalancer.server.port=9600
 
   kibana:
     image: docker.elastic.co/kibana/kibana:7.15.0
@@ -52,9 +92,29 @@ services:
         target: /usr/share/kibana/config/kibana.yml
     networks:
       - elk
+      - traefik-public
     deploy:
       mode: replicated
       replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1024M
+      restart_policy:
+        condition: on-failure
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.constraint-label=traefik-public
+        - traefik.http.routers.elk-kibana-http.rule=Host(`kibana.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.elk-kibana-http.entrypoints=http
+        - traefik.http.routers.elk-kibana-http.middlewares=https-redirect
+        - traefik.http.routers.elk-kibana-https.rule=Host(`kibana.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.elk-kibana-https.entrypoints=https
+        - traefik.http.routers.elk-kibana-https.tls=true
+        - traefik.http.routers.elk-kibana-https.tls.certresolver=le
+        - traefik.http.services.elk-kibana.loadbalancer.server.port=5601
+      
 
 configs:
 
@@ -69,4 +129,6 @@ configs:
 
 networks:
   elk:
-    driver: overlay
+    # driver: overla
+  traefik-public:
+    external: true
